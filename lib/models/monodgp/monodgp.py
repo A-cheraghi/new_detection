@@ -124,29 +124,54 @@ class MonoDGP(nn.Module):
             self.depthaware_transformer.decoder.bbox_embed = None
 
         #############################################################################################################
+        #برای شبکه که گیت داشت و سایر اداپتر و فیوژن کوچک تر بود
+        # self.feat_adapter_2d = nn.Sequential(
+        #     nn.Linear(hidden_dim, hidden_dim),
+        #     nn.GELU(),
+        #     nn.Linear(hidden_dim, hidden_dim)
+        # )
+
+        # self.feat_adapter_3d = nn.Sequential(
+        #     nn.Linear(hidden_dim, hidden_dim),
+        #     nn.GELU(),
+        #     nn.Linear(hidden_dim, hidden_dim)
+        # )
+
+        # self.fusion_mlp = nn.Sequential(
+        #     nn.Linear(hidden_dim * 2, hidden_dim * 2),
+        #     nn.GELU(),
+        #     nn.Linear(hidden_dim * 2, hidden_dim),
+        #     nn.GELU(),
+        #     nn.Linear(hidden_dim, hidden_dim)
+        # )
+
+        # self.bbox_gate = nn.Sequential(
+        #     nn.Linear(hidden_dim * 2, hidden_dim),
+        #     nn.Sigmoid()
+        # )
+        #**********************************************************************
         self.feat_adapter_2d = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.Linear(hidden_dim, hidden_dim * 2),
             nn.GELU(),
-            nn.Linear(hidden_dim, hidden_dim)
+            nn.Linear(hidden_dim * 2, hidden_dim)
         )
 
         self.feat_adapter_3d = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.Linear(hidden_dim, hidden_dim * 2),
             nn.GELU(),
-            nn.Linear(hidden_dim, hidden_dim)
+            nn.Linear(hidden_dim * 2, hidden_dim)
         )
 
         self.fusion_mlp = nn.Sequential(
-            nn.Linear(hidden_dim * 2, hidden_dim * 2),
+            nn.LayerNorm(hidden_dim * 2),
+            nn.Linear(hidden_dim * 2, hidden_dim * 4),
             nn.GELU(),
-            nn.Linear(hidden_dim * 2, hidden_dim),
+            nn.Dropout(0.1), 
+            nn.Linear(hidden_dim * 4, hidden_dim * 2),
             nn.GELU(),
-            nn.Linear(hidden_dim, hidden_dim)
-        )
-
-        self.bbox_gate = nn.Sequential(
-            nn.Linear(hidden_dim * 2, hidden_dim),
-            nn.Sigmoid()
+            nn.Linear(hidden_dim * 2, hidden_dim)
         )
         #############################################################################################################^
 
@@ -248,9 +273,9 @@ class MonoDGP(nn.Module):
         fusion_feature = hs_3d_last + self.fusion_mlp(fusion_input)
 
         # Channel-wise BBox Gating
-        gate_input = torch.cat([feat_2d_refined, feat_3d_refined], dim=-1)
-        alpha = self.bbox_gate(gate_input)
-        bbox_feature = (alpha * feat_2d_refined) + ((1.0 - alpha) * feat_3d_refined)
+        # gate_input = torch.cat([feat_2d_refined, feat_3d_refined], dim=-1)
+        # alpha = self.bbox_gate(gate_input)
+        # bbox_feature = (alpha * feat_2d_refined) + ((1.0 - alpha) * feat_3d_refined)
         #############################################################################################################^
 
         outputs_coords = []
@@ -269,14 +294,15 @@ class MonoDGP(nn.Module):
             #############################################################################################################
             # Feature Selection (Base hs[lvl] for intermediate layers, Refined features for the last layer)
             if lvl == hs.shape[0] - 1:
-                feat_for_bbox = bbox_feature
+                # feat_for_bbox = bbox_feature
                 feat_for_gen = fusion_feature
             else:
-                feat_for_bbox = hs[lvl]
+                # feat_for_bbox = hs[lvl]
                 feat_for_gen = hs[lvl]
 
             # 1. BBox Head (uses feat_for_bbox)
-            tmp = self.bbox_embed[lvl](feat_for_bbox)
+            # tmp = self.bbox_embed[lvl](feat_for_bbox)
+            tmp = self.bbox_embed[lvl](feat_for_gen)
             if reference.shape[-1] == 6:
                 tmp += reference
             else:

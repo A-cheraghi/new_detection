@@ -49,7 +49,7 @@ class Trainer(object):
             self.model.feat_adapter_2d,
             self.model.feat_adapter_3d,
             self.model.fusion_mlp,
-            self.model.bbox_gate,
+            # self.model.bbox_gate,
             
             # Original Base Prediction Heads (Fine-tuning)
             self.model.class_embed[-1],
@@ -89,10 +89,10 @@ class Trainer(object):
 
             # 2. Initialize bbox_gate (weight = 0, bias = -3.0 -> Sigmoid(-3.0) ≈ 0.047)
             # This gives initial bias toward 3D features while maintaining stability
-            gate_linear = [m for m in self.model.bbox_gate.modules() if isinstance(m, nn.Linear)]
-            if gate_linear:
-                nn.init.zeros_(gate_linear[0].weight)
-                nn.init.constant_(gate_linear[0].bias, -3.0)
+            # gate_linear = [m for m in self.model.bbox_gate.modules() if isinstance(m, nn.Linear)]
+            # if gate_linear:
+            #     nn.init.zeros_(gate_linear[0].weight)
+            #     nn.init.constant_(gate_linear[0].bias, -3.0)
 
             # NOTE: Do NOT zero-initialize prediction heads (class_embed, bbox_embed, etc.)
             # because they contain critical pretrained weights from the base model!
