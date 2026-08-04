@@ -250,7 +250,7 @@ class MonoDGP(nn.Module):
         # Channel-wise BBox Gating
         alpha = self.bbox_gate(hs_3d_last)
         bbox_feature = (alpha * feat_2d_refined) + ((1.0 - alpha) * feat_3d_refined)
-        #############################################################################################################
+        #############################################################################################################^
 
         outputs_coords = []
         outputs_classes = []
@@ -273,7 +273,6 @@ class MonoDGP(nn.Module):
             else:
                 feat_for_bbox = hs[lvl]
                 feat_for_gen = hs[lvl]
-            #############################################################################################################
 
             # 1. BBox Head (uses feat_for_bbox)
             tmp = self.bbox_embed[lvl](feat_for_bbox)
@@ -322,7 +321,7 @@ class MonoDGP(nn.Module):
             # 5. Angle Head (uses feat_for_gen)
             outputs_angle = self.angle_embed[lvl](feat_for_gen)
             outputs_angles.append(outputs_angle)
-
+        #############################################################################################################^
         outputs_coord = torch.stack(outputs_coords)
         outputs_class = torch.stack(outputs_classes)
         outputs_3d_dim = torch.stack(outputs_3d_dims)
