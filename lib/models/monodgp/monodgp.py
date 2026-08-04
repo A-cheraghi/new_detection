@@ -145,7 +145,7 @@ class MonoDGP(nn.Module):
         )
 
         self.bbox_gate = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
+            nn.Linear(hidden_dim * 2, hidden_dim),
             nn.Sigmoid()
         )
         #############################################################################################################^
@@ -248,7 +248,8 @@ class MonoDGP(nn.Module):
         fusion_feature = hs_3d_last + self.fusion_mlp(fusion_input)
 
         # Channel-wise BBox Gating
-        alpha = self.bbox_gate(hs_3d_last)
+        gate_input = torch.cat([feat_2d_refined, feat_3d_refined], dim=-1)
+        alpha = self.bbox_gate(gate_input)
         bbox_feature = (alpha * feat_2d_refined) + ((1.0 - alpha) * feat_3d_refined)
         #############################################################################################################^
 
