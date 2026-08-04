@@ -52,11 +52,11 @@ class Trainer(object):
             self.model.bbox_gate,
             
             # Original Base Prediction Heads (Fine-tuning)
-            self.model.class_embed,
-            self.model.bbox_embed,
-            self.model.dim_embed_3d,
-            self.model.angle_embed,
-            self.model.depth_embed
+            self.model.class_embed[-1],
+            self.model.bbox_embed[-1],
+            self.model.dim_embed_3d[-1],
+            self.model.angle_embed[-1],
+            self.model.depth_embed[-1]
         ]
         for module in train_modules:
             for param in module.parameters():

@@ -191,7 +191,13 @@ class MonoDGP(nn.Module):
 
         srcs = enhanced_srcs
         pred_depth_map_logits, depth_pos_embed, weighted_depth = self.depth_predictor(srcs, masks[1], seg_embed[1] + pos[1])
-        
+
+        #pos_3d = []
+        # for l, feat in enumerate(features):
+        #     depth_pos_3d = self.position_embed(feat, calibs=None, depth_map = pred_depth_map_logits)
+        #     pos[l] = depth_pos_3d
+        #pos = pos_3d
+
         intermediate_output = self.det2d_transformer(srcs, masks, pos, query_embeds)
         
         hs_2d = intermediate_output['hs']
@@ -228,12 +234,25 @@ class MonoDGP(nn.Module):
 
         query_embeds = hs_2d[-1]
         hs, init_reference, inter_references = self.det3d_transformer(intermediate_output, query_embeds, depth_pos_embed)
-    
-        # outputs_coords = []
+
+        #############################################################################################################
+        hs_2d_last = hs_2d[-1]  # 2D Decoder last layer feature
+        hs_3d_last = hs[-1]     # 3D Decoder last layer feature
+
+        # Refine features via Adapters with Residual Connections
+        feat_2d_refined = hs_2d_last + self.feat_adapter_2d(hs_2d_last)
+        feat_3d_refined = hs_3d_last + self.feat_adapter_3d(hs_3d_last)
+
+        # Multimodal Fusion (Residual connection to 3D base feature)
+        fusion_input = torch.cat([feat_2d_refined, feat_3d_refined], dim=-1)
+        fusion_feature = hs_3d_last + self.fusion_mlp(fusion_input)
+
+        # Channel-wise BBox Gating
+        alpha = self.bbox_gate(hs_3d_last)
+        bbox_feature = (alpha * feat_2d_refined) + ((1.0 - alpha) * feat_3d_refined)
+        #############################################################################################################
 
         outputs_coords = []
-        outputs_coord_logits_list = []
-
         outputs_classes = []
         outputs_3d_dims = []       
         outputs_depths = []
@@ -246,7 +265,18 @@ class MonoDGP(nn.Module):
                 reference = inter_references[lvl - 1]
             reference = inverse_sigmoid(reference)
 
-            tmp = self.bbox_embed[lvl](hs[lvl])
+            #############################################################################################################
+            # Feature Selection (Base hs[lvl] for intermediate layers, Refined features for the last layer)
+            if lvl == hs.shape[0] - 1:
+                feat_for_bbox = bbox_feature
+                feat_for_gen = fusion_feature
+            else:
+                feat_for_bbox = hs[lvl]
+                feat_for_gen = hs[lvl]
+            #############################################################################################################
+
+            # 1. BBox Head (uses feat_for_bbox)
+            tmp = self.bbox_embed[lvl](feat_for_bbox)
             if reference.shape[-1] == 6:
                 tmp += reference
             else:
@@ -254,46 +284,46 @@ class MonoDGP(nn.Module):
                 tmp[..., :2] += reference
 
             # 3d center + 2d box
-            # outputs_coord = tmp.sigmoid()
-            # outputs_coords.append(outputs_coord)
-            #############################################################################################################
-            outputs_coord_logits = tmp
             outputs_coord = tmp.sigmoid()
-
             outputs_coords.append(outputs_coord)
-            outputs_coord_logits_list.append(outputs_coord_logits)
-            #############################################################################################################^
-            # classes
-            outputs_class = self.class_embed[lvl](hs[lvl])
+
+            # 2. Class Head (uses feat_for_gen)
+            outputs_class = self.class_embed[lvl](feat_for_gen)
             outputs_classes.append(outputs_class)
 
-            # 3D sizes
-            size3d = self.dim_embed_3d[lvl](hs[lvl])
+            # 3. 3D Sizes Head (uses feat_for_gen)
+            size3d = self.dim_embed_3d[lvl](feat_for_gen)
             outputs_3d_dims.append(size3d)
 
-            # depth_geo_err
-            depth_geo_err = self.depth_embed[lvl](hs[lvl])
+            # 4. Depth Error Head (uses feat_for_gen)
+            depth_geo_err = self.depth_embed[lvl](feat_for_gen)
             
             # depth_geo
             box2d_height_norm = outputs_coord[:, :, 4] + outputs_coord[:, :, 5]
             box2d_height = torch.clamp(box2d_height_norm * img_sizes[:, 1: 2], min=1.0)
-            depth_geo = size3d[:, :, 0]/ box2d_height * calibs[:, 0, 0].unsqueeze(1)
+            depth_geo = size3d[:, :, 0] / box2d_height * calibs[:, 0, 0].unsqueeze(1)
+
+            # depth_map
+            # outputs_center3d = ((outputs_coord[..., :2] - 0.5) * 2).unsqueeze(2)   #.detach()
+            # depth_map = F.grid_sample(
+            #     weighted_depth.unsqueeze(1),
+            #     outputs_center3d,
+            #     mode='bilinear',
+            #     align_corners=True).squeeze(1)    
             
+            # depth average + sigma
+            # depth_ave = torch.cat([( (1. / (depth_reg[:, :, 0: 1].sigmoid() + 1e-6) - 1.) + depth_geo.unsqueeze(-1) + depth_map) / 3,
             
             depth_ave = torch.cat([depth_geo.unsqueeze(-1) + depth_geo_err[:, :, 0: 1],          
-                                    depth_geo_err[:, :, 1: 2]], -1)
-
+                depth_geo_err[:, :, 1: 2]], -1)
+            
             outputs_depths.append(depth_ave)
 
-            # angles
-            outputs_angle = self.angle_embed[lvl](hs[lvl])
+            # 5. Angle Head (uses feat_for_gen)
+            outputs_angle = self.angle_embed[lvl](feat_for_gen)
             outputs_angles.append(outputs_angle)
 
-        # outputs_coord = torch.stack(outputs_coords)
-        #############################################################################################################
         outputs_coord = torch.stack(outputs_coords)
-        outputs_coord_logits = torch.stack(outputs_coord_logits_list)
-        #############################################################################################################^
         outputs_class = torch.stack(outputs_classes)
         outputs_3d_dim = torch.stack(outputs_3d_dims)
         outputs_depth = torch.stack(outputs_depths) 
@@ -307,40 +337,7 @@ class MonoDGP(nn.Module):
         out['pred_angle'] = outputs_angle[-1]
         out['pred_depth_map_logits'] = pred_depth_map_logits
         out['pred_region_prob'] = region_probs
-        #############################################################################################################
-        box_logits = outputs_coord_logits[-1] #extra
-        #############################################################################################################^
-        hs_2d_last2 = torch.cat([hs_2d[-2], hs_2d[-1]], dim=-1)
-        hs_3d_last2 = torch.cat([hs[-2], hs[-1]], dim=-1)
 
-
-        feat_2d_refined = self.feat_adapter_2d(hs_2d_last2)
-        feat_3d_refined = self.feat_adapter_3d(hs_3d_last2)
-
-
-        fusion_input = torch.cat([feat_2d_refined, feat_3d_refined], dim=-1)
-        fusion_feature = self.fusion_mlp(fusion_input)
-
-        # box correction
-        box_corr = self.box_correction(fusion_feature)
-        out['pred_boxes'] = (box_logits + box_corr).sigmoid()
-
-        # dimension correction
-        dim_corr = self.dim_correction(fusion_feature)
-        out['pred_3d_dim'] = out['pred_3d_dim'] + dim_corr
-
-        # depth correction
-        depth_corr = self.depth_correction(fusion_feature)
-        out['pred_depth'] = out['pred_depth'] + depth_corr
-
-        # angle correction
-        angle_corr = self.angle_correction(fusion_feature)
-        out['pred_angle'] = out['pred_angle'] + angle_corr
-
-        # class correction
-        class_corr = self.class_correction(fusion_feature)
-        out['pred_logits'] = out['pred_logits'] + class_corr
-        #############################################################################################################^
         out['inter_outputs'] = self._set_inter_loss(inter_class, inter_coord)
         
         if self.aux_loss:
@@ -348,7 +345,7 @@ class MonoDGP(nn.Module):
                 outputs_class, outputs_coord, outputs_3d_dim, outputs_angle, outputs_depth) 
         
         return out
-
+    
     @torch.jit.unused
     def _set_aux_loss(self, outputs_class, outputs_coord, outputs_3d_dim, outputs_angle, outputs_depth):
         # this is a workaround to make torchscript happy, as torchscript
