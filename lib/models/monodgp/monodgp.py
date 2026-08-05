@@ -151,24 +151,21 @@ class MonoDGP(nn.Module):
         # )
         #**********************************************************************
         self.feat_adapter_2d = nn.Sequential(
-            nn.LayerNorm(hidden_dim),
             nn.Linear(hidden_dim, hidden_dim * 2),
             nn.GELU(),
             nn.Linear(hidden_dim * 2, hidden_dim)
         )
 
         self.feat_adapter_3d = nn.Sequential(
-            nn.LayerNorm(hidden_dim),
             nn.Linear(hidden_dim, hidden_dim * 2),
             nn.GELU(),
             nn.Linear(hidden_dim * 2, hidden_dim)
         )
 
         self.fusion_mlp = nn.Sequential(
-            nn.LayerNorm(hidden_dim * 2),
             nn.Linear(hidden_dim * 2, hidden_dim * 4),
             nn.GELU(),
-            nn.Dropout(0.1), 
+            nn.Dropout(0.1),
             nn.Linear(hidden_dim * 4, hidden_dim * 2),
             nn.GELU(),
             nn.Linear(hidden_dim * 2, hidden_dim)
