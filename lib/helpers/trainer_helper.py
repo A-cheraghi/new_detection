@@ -240,72 +240,12 @@ class Trainer(object):
                 print("")
                 print("")
 
-
-
-            # =====================================================================
-            # [بخش دیباگ]: ۱. گرفتن یک کپی از وزن‌ها قبل از اعمال بک‌وارد و آپدیت
-            # =====================================================================
-            # انتخاب پارامترهای وزن (weight) از اولین لایه Linear در adapter و depth_embed
-            adapter_param = list(self.model.feat_adapter_2d.parameters())[0]
-            depth_param = list(self.model.depth_embed[-1].parameters())[0]
-            
-            weight_before_adapter = adapter_param.clone().detach()
-            weight_before_depth = depth_param.clone().detach()
-
-            # محاسبه گرادیان
             detr_losses.backward()
-
-            # =====================================================================
-            # [بخش دیباگ]: ۲. بررسی تولید شدن گرادیان
-            # =====================================================================
-            grad_norm_adapter = adapter_param.grad.norm().item() if adapter_param.grad is not None else -1.0
-            grad_norm_depth = depth_param.grad.norm().item() if depth_param.grad is not None else -1.0
-
-            # اعمال آپدیت توسط آپتیمایزر
             self.optimizer.step()
-
-            # =====================================================================
-            # [بخش دیباگ]: ۳. محاسبه میزان تغییرات وزن‌ها پس از آپدیت
-            # =====================================================================
-            weight_after_adapter = adapter_param.detach()
-            weight_after_depth = depth_param.detach()
-
-            diff_adapter = torch.sum(torch.abs(weight_before_adapter - weight_after_adapter)).item()
-            diff_depth = torch.sum(torch.abs(weight_before_depth - weight_after_depth)).item()
-
-            if batch_idx % 30 == 0:
-                print(">>> DEBUG: بررسی به‌روزرسانی وزن‌ها <<<")
-                print(f"feat_adapter_2d  -> Grad Norm: {grad_norm_adapter:.6f} | مجموع تغییرات وزن: {diff_adapter:.8f}")
-                print(f"depth_embed[-1]  -> Grad Norm: {grad_norm_depth:.6f} | مجموع تغییرات وزن: {diff_depth:.8f}")
-                if diff_adapter == 0.0 or diff_depth == 0.0:
-                    print("⚠️ هشدار: وزن‌ها هیچ تغییری نکرده‌اند!")
-                print("=====================================================================")
 
             if batch_idx > 0 and batch_idx % 200 == 0:
                 progress_bar.update(200)
         progress_bar.close()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        #     detr_losses.backward()
-        #     self.optimizer.step()
-
-        #     if batch_idx > 0 and batch_idx % 200 == 0:
-        #         progress_bar.update(200)
-        # progress_bar.close()
 
     def prepare_targets(self, targets, batch_size):
         targets_list = []
