@@ -44,6 +44,8 @@ class Trainer(object):
         for param in self.model.parameters():
             param.requires_grad = False
 
+        active_last_idx = 2
+        
         train_modules = [
             # New Feature Adapter & Fusion Modules
             self.model.feat_adapter_2d,
@@ -52,11 +54,11 @@ class Trainer(object):
             # self.model.bbox_gate,
             
             # Original Base Prediction Heads (Fine-tuning)
-            self.model.class_embed[-1],
-            self.model.bbox_embed[-1],
-            self.model.dim_embed_3d[-1],
-            self.model.angle_embed[-1],
-            self.model.depth_embed[-1]
+            self.model.class_embed[active_last_idx],
+            self.model.bbox_embed[active_last_idx],
+            self.model.dim_embed_3d[active_last_idx],
+            self.model.angle_embed[active_last_idx],
+            self.model.depth_embed[active_last_idx]
         ]
         for module in train_modules:
             for param in module.parameters():
