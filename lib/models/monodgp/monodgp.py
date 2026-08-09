@@ -150,28 +150,34 @@ class MonoDGP(nn.Module):
         #     nn.Sigmoid()
         # )
         #**********************************************************************
-        self.feat_adapter_2d = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim * 2),
+        # self.feat_adapter_2d = nn.Sequential(
+        #     nn.Linear(hidden_dim, hidden_dim * 2),
+        #     nn.GELU(),
+        #     nn.Dropout(0.1),
+        #     nn.Linear(hidden_dim * 2, hidden_dim)
+        # )
+
+        # self.feat_adapter_3d = nn.Sequential(
+        #     nn.Linear(hidden_dim, hidden_dim * 2),
+        #     nn.GELU(),
+        #     nn.Dropout(0.1),
+        #     nn.Linear(hidden_dim * 2, hidden_dim)
+        # )
+
+        # self.fusion_mlp = nn.Sequential(
+        #     nn.Linear(hidden_dim * 2, hidden_dim * 4), 
+        #     nn.GELU(),
+        #     nn.Dropout(0.1),
+        #     nn.Linear(hidden_dim * 4, hidden_dim)  
+        # )
+        #############################################################################################################^
+        self.depth_context_mlp = nn.Sequential(
+            nn.Linear(hidden_dim + 24 + 1, hidden_dim * 2),
             nn.GELU(),
             nn.Dropout(0.1),
             nn.Linear(hidden_dim * 2, hidden_dim)
-        )
-
-        self.feat_adapter_3d = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim * 2),
-            nn.GELU(),
-            nn.Dropout(0.1),
-            nn.Linear(hidden_dim * 2, hidden_dim)
-        )
-
-        self.fusion_mlp = nn.Sequential(
-            nn.Linear(hidden_dim * 2, hidden_dim * 4), 
-            nn.GELU(),
-            nn.Dropout(0.1),
-            nn.Linear(hidden_dim * 4, hidden_dim)  
         )
         #############################################################################################################^
-
 
     def forward(self, images, calibs, targets, img_sizes, dn_args=None):
         """ The forward expects a NestedTensor, which consists of:
@@ -258,16 +264,16 @@ class MonoDGP(nn.Module):
         hs, init_reference, inter_references = self.det3d_transformer(intermediate_output, query_embeds, depth_pos_embed)
 
         #############################################################################################################
-        hs_2d_last = hs_2d[-1]  # 2D Decoder last layer feature
-        hs_3d_last = hs[-1]     # 3D Decoder last layer feature
+        # hs_2d_last = hs_2d[-1]  # 2D Decoder last layer feature
+        # hs_3d_last = hs[-1]     # 3D Decoder last layer feature
 
-        # Refine features via Adapters with Residual Connections
-        feat_2d_refined = hs_2d_last + self.feat_adapter_2d(hs_2d_last)
-        feat_3d_refined = hs_3d_last + self.feat_adapter_3d(hs_3d_last)
+        # # Refine features via Adapters with Residual Connections
+        # feat_2d_refined = hs_2d_last + self.feat_adapter_2d(hs_2d_last)
+        # feat_3d_refined = hs_3d_last + self.feat_adapter_3d(hs_3d_last)
 
-        # Multimodal Fusion (Residual connection to 3D base feature)
-        fusion_input = torch.cat([feat_2d_refined, feat_3d_refined], dim=-1)
-        fusion_feature = hs_3d_last + self.fusion_mlp(fusion_input)
+        # # Multimodal Fusion (Residual connection to 3D base feature)
+        # fusion_input = torch.cat([feat_2d_refined, feat_3d_refined], dim=-1)
+        # fusion_feature = hs_3d_last + self.fusion_mlp(fusion_input)
 
         # Channel-wise BBox Gating
         # gate_input = torch.cat([feat_2d_refined, feat_3d_refined], dim=-1)
@@ -281,6 +287,71 @@ class MonoDGP(nn.Module):
         outputs_depths = []
         outputs_angles = []
 
+        # for lvl in range(hs.shape[0]):
+        #     if lvl == 0:
+        #         reference = init_reference
+        #     else:
+        #         reference = inter_references[lvl - 1]
+        #     reference = inverse_sigmoid(reference)
+
+        #     #############################################################################################################
+        #     # Feature Selection (Base hs[lvl] for intermediate layers, Refined features for the last layer)
+        #     if lvl == hs.shape[0] - 1:
+        #         # feat_for_bbox = bbox_feature
+        #         feat_for_gen = fusion_feature
+        #     else:
+        #         # feat_for_bbox = hs[lvl]
+        #         feat_for_gen = hs[lvl]
+
+        #     # 1. BBox Head (uses feat_for_bbox)
+        #     # tmp = self.bbox_embed[lvl](feat_for_bbox)
+        #     tmp = self.bbox_embed[lvl](feat_for_gen)
+        #     if reference.shape[-1] == 6:
+        #         tmp += reference
+        #     else:
+        #         assert reference.shape[-1] == 2
+        #         tmp[..., :2] += reference
+
+        #     # 3d center + 2d box
+        #     outputs_coord = tmp.sigmoid()
+        #     outputs_coords.append(outputs_coord)
+
+        #     # 2. Class Head (uses feat_for_gen)
+        #     outputs_class = self.class_embed[lvl](feat_for_gen)
+        #     outputs_classes.append(outputs_class)
+
+        #     # 3. 3D Sizes Head (uses feat_for_gen)
+        #     size3d = self.dim_embed_3d[lvl](feat_for_gen)
+        #     outputs_3d_dims.append(size3d)
+
+        #     # 4. Depth Error Head (uses feat_for_gen)
+        #     depth_geo_err = self.depth_embed[lvl](feat_for_gen)
+            
+        #     # depth_geo
+        #     box2d_height_norm = outputs_coord[:, :, 4] + outputs_coord[:, :, 5]
+        #     box2d_height = torch.clamp(box2d_height_norm * img_sizes[:, 1: 2], min=1.0)
+        #     depth_geo = size3d[:, :, 0] / box2d_height * calibs[:, 0, 0].unsqueeze(1)
+
+        #     # depth_map
+        #     # outputs_center3d = ((outputs_coord[..., :2] - 0.5) * 2).unsqueeze(2)   #.detach()
+        #     # depth_map = F.grid_sample(
+        #     #     weighted_depth.unsqueeze(1),
+        #     #     outputs_center3d,
+        #     #     mode='bilinear',
+        #     #     align_corners=True).squeeze(1)    
+            
+        #     # depth average + sigma
+        #     # depth_ave = torch.cat([( (1. / (depth_reg[:, :, 0: 1].sigmoid() + 1e-6) - 1.) + depth_geo.unsqueeze(-1) + depth_map) / 3,
+            
+        #     depth_ave = torch.cat([depth_geo.unsqueeze(-1) + depth_geo_err[:, :, 0: 1],          
+        #         depth_geo_err[:, :, 1: 2]], -1)
+            
+        #     outputs_depths.append(depth_ave)
+
+        #     # 5. Angle Head (uses feat_for_gen)
+        #     outputs_angle = self.angle_embed[lvl](feat_for_gen)
+        #     outputs_angles.append(outputs_angle)
+        #############################################################################################################^
         for lvl in range(hs.shape[0]):
             if lvl == 0:
                 reference = init_reference
@@ -288,18 +359,7 @@ class MonoDGP(nn.Module):
                 reference = inter_references[lvl - 1]
             reference = inverse_sigmoid(reference)
 
-            #############################################################################################################
-            # Feature Selection (Base hs[lvl] for intermediate layers, Refined features for the last layer)
-            if lvl == hs.shape[0] - 1:
-                # feat_for_bbox = bbox_feature
-                feat_for_gen = fusion_feature
-            else:
-                # feat_for_bbox = hs[lvl]
-                feat_for_gen = hs[lvl]
-
-            # 1. BBox Head (uses feat_for_bbox)
-            # tmp = self.bbox_embed[lvl](feat_for_bbox)
-            tmp = self.bbox_embed[lvl](feat_for_gen)
+            tmp = self.bbox_embed[lvl](hs[lvl])
             if reference.shape[-1] == 6:
                 tmp += reference
             else:
@@ -310,22 +370,22 @@ class MonoDGP(nn.Module):
             outputs_coord = tmp.sigmoid()
             outputs_coords.append(outputs_coord)
 
-            # 2. Class Head (uses feat_for_gen)
-            outputs_class = self.class_embed[lvl](feat_for_gen)
+            # classes
+            outputs_class = self.class_embed[lvl](hs[lvl])
             outputs_classes.append(outputs_class)
 
-            # 3. 3D Sizes Head (uses feat_for_gen)
-            size3d = self.dim_embed_3d[lvl](feat_for_gen)
+            # 3D sizes
+            size3d = self.dim_embed_3d[lvl](hs[lvl])
             outputs_3d_dims.append(size3d)
 
-            # 4. Depth Error Head (uses feat_for_gen)
-            depth_geo_err = self.depth_embed[lvl](feat_for_gen)
+            # depth_geo_err
+            # depth_geo_err = self.depth_embed[lvl](hs[lvl])
             
             # depth_geo
             box2d_height_norm = outputs_coord[:, :, 4] + outputs_coord[:, :, 5]
             box2d_height = torch.clamp(box2d_height_norm * img_sizes[:, 1: 2], min=1.0)
-            depth_geo = size3d[:, :, 0] / box2d_height * calibs[:, 0, 0].unsqueeze(1)
-
+            depth_geo = size3d[:, :, 0]/ box2d_height * calibs[:, 0, 0].unsqueeze(1)
+            
             # depth_map
             # outputs_center3d = ((outputs_coord[..., :2] - 0.5) * 2).unsqueeze(2)   #.detach()
             # depth_map = F.grid_sample(
@@ -336,16 +396,47 @@ class MonoDGP(nn.Module):
             
             # depth average + sigma
             # depth_ave = torch.cat([( (1. / (depth_reg[:, :, 0: 1].sigmoid() + 1e-6) - 1.) + depth_geo.unsqueeze(-1) + depth_map) / 3,
-            
+
+
+            # angles
+            outputs_angle = self.angle_embed[lvl](hs[lvl])
+            outputs_angles.append(outputs_angle)
+
+            # depth_geo_err
+            if lvl == hs.shape[0] - 1:
+                depth_context_input = torch.cat(
+                    [
+                        hs[lvl],
+                        outputs_angle,
+                        depth_geo.unsqueeze(-1)
+                    ],
+                    dim=-1
+                )
+
+                depth_context_feature = self.depth_context_mlp(
+                    depth_context_input
+                )
+
+                depth_geo_err = self.depth_embed[lvl](
+                    depth_context_feature
+                )
+
+            else:
+                depth_geo_err = self.depth_embed[lvl](
+                    hs[lvl]
+                )
+
+                   
             depth_ave = torch.cat([depth_geo.unsqueeze(-1) + depth_geo_err[:, :, 0: 1],          
-                depth_geo_err[:, :, 1: 2]], -1)
-            
+                                    depth_geo_err[:, :, 1: 2]], -1)
+
             outputs_depths.append(depth_ave)
 
-            # 5. Angle Head (uses feat_for_gen)
-            outputs_angle = self.angle_embed[lvl](feat_for_gen)
-            outputs_angles.append(outputs_angle)
-        #############################################################################################################^
+
+
+
+
+
         outputs_coord = torch.stack(outputs_coords)
         outputs_class = torch.stack(outputs_classes)
         outputs_3d_dim = torch.stack(outputs_3d_dims)

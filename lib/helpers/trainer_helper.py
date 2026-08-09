@@ -40,25 +40,76 @@ class Trainer(object):
         self.model_name = model_name
         self.output_dir = os.path.join('./' + cfg['save_path'], model_name)
         self.tester = None
-        #################################################################################################
+        # #################################################################################################
+        # for param in self.model.parameters():
+        #     param.requires_grad = False
+
+        # active_last_idx = 2
+        
+        # train_modules = [
+        #     # New Feature Adapter & Fusion Modules
+        #     self.model.feat_adapter_2d,
+        #     self.model.feat_adapter_3d,
+        #     self.model.fusion_mlp,
+        #     # self.model.bbox_gate,
+            
+        #     # Original Base Prediction Heads (Fine-tuning)
+        #     self.model.class_embed[active_last_idx],
+        #     self.model.bbox_embed[active_last_idx],
+        #     self.model.dim_embed_3d[active_last_idx],
+        #     self.model.angle_embed[active_last_idx],
+        #     self.model.depth_embed[active_last_idx]
+        # ]
+        # for module in train_modules:
+        #     for param in module.parameters():
+        #         param.requires_grad = True
+        # #################################################################################################^       
+        # # loading pretrain/resume model
+        # if cfg.get('pretrain_model'):
+        #     assert os.path.exists(cfg['pretrain_model'])
+        #     load_checkpoint(model=self.model,
+        #                     optimizer=None,
+        #                     filename=cfg['pretrain_model'],
+        #                     map_location=self.device,
+        #                     logger=self.logger)
+        #     #################################################################################################
+        #     # 1. Zero-initialize the last linear layer of NEW residual modules ONLY
+        #     # This ensures that at Epoch 0: residual_output = 0, so feature = base_feature + 0
+        #     new_residual_modules = [
+        #         self.model.feat_adapter_2d,
+        #         self.model.feat_adapter_3d,
+        #         self.model.fusion_mlp
+        #     ]
+
+        #     for module in new_residual_modules:
+        #         # Get all linear layers in the sequential module
+        #         linear_layers = [m for m in module.modules() if isinstance(m, nn.Linear)]
+        #         if linear_layers:
+        #             # Zero-out weights and bias of the VERY LAST linear layer
+        #             nn.init.zeros_(linear_layers[-1].weight)
+        #             nn.init.zeros_(linear_layers[-1].bias)
+
+        #     # 2. Initialize bbox_gate (weight = 0, bias = -3.0 -> Sigmoid(-3.0) ≈ 0.047)
+        #     # This gives initial bias toward 3D features while maintaining stability
+        #     # gate_linear = [m for m in self.model.bbox_gate.modules() if isinstance(m, nn.Linear)]
+        #     # if gate_linear:
+        #     #     nn.init.zeros_(gate_linear[0].weight)
+        #     #     nn.init.constant_(gate_linear[0].bias, -3.0)
+
+        #     # NOTE: Do NOT zero-initialize prediction heads (class_embed, bbox_embed, etc.)
+        #     # because they contain critical pretrained weights from the base model!
+
+        #     self.logger.info("Pretrained base loaded, target modules unfrozen, and new fusion components zero-initialized.")
+        # #################################################################################################^       
+                #################################################################################################
         for param in self.model.parameters():
             param.requires_grad = False
 
         active_last_idx = 2
         
         train_modules = [
-            # New Feature Adapter & Fusion Modules
-            self.model.feat_adapter_2d,
-            self.model.feat_adapter_3d,
-            self.model.fusion_mlp,
-            # self.model.bbox_gate,
-            
-            # Original Base Prediction Heads (Fine-tuning)
-            self.model.class_embed[active_last_idx],
-            self.model.bbox_embed[active_last_idx],
-            self.model.dim_embed_3d[active_last_idx],
-            self.model.angle_embed[active_last_idx],
-            self.model.depth_embed[active_last_idx]
+            self.model.depth_context_mlp,
+            self.model.depth_embed[active_last_idx],
         ]
         for module in train_modules:
             for param in module.parameters():
@@ -72,35 +123,7 @@ class Trainer(object):
                             filename=cfg['pretrain_model'],
                             map_location=self.device,
                             logger=self.logger)
-            #################################################################################################
-            # 1. Zero-initialize the last linear layer of NEW residual modules ONLY
-            # This ensures that at Epoch 0: residual_output = 0, so feature = base_feature + 0
-            new_residual_modules = [
-                self.model.feat_adapter_2d,
-                self.model.feat_adapter_3d,
-                self.model.fusion_mlp
-            ]
-
-            for module in new_residual_modules:
-                # Get all linear layers in the sequential module
-                linear_layers = [m for m in module.modules() if isinstance(m, nn.Linear)]
-                if linear_layers:
-                    # Zero-out weights and bias of the VERY LAST linear layer
-                    nn.init.zeros_(linear_layers[-1].weight)
-                    nn.init.zeros_(linear_layers[-1].bias)
-
-            # 2. Initialize bbox_gate (weight = 0, bias = -3.0 -> Sigmoid(-3.0) ≈ 0.047)
-            # This gives initial bias toward 3D features while maintaining stability
-            # gate_linear = [m for m in self.model.bbox_gate.modules() if isinstance(m, nn.Linear)]
-            # if gate_linear:
-            #     nn.init.zeros_(gate_linear[0].weight)
-            #     nn.init.constant_(gate_linear[0].bias, -3.0)
-
-            # NOTE: Do NOT zero-initialize prediction heads (class_embed, bbox_embed, etc.)
-            # because they contain critical pretrained weights from the base model!
-
-            self.logger.info("Pretrained base loaded, target modules unfrozen, and new fusion components zero-initialized.")
-        #################################################################################################^       
+            #################################################################################################    
         if cfg.get('resume_model', None):
             resume_model_path = os.path.join(self.output_dir, "checkpoint.pth")
             assert os.path.exists(resume_model_path)
@@ -112,8 +135,6 @@ class Trainer(object):
                 logger=self.logger)
             self.lr_scheduler.last_epoch = self.epoch - 1
             self.logger.info("Loading Checkpoint... Best Result:{}, Best Epoch:{}".format(self.best_result, self.best_epoch))
-
-
         #################################################################################################
         total_params = 0
         trainable_params = 0
