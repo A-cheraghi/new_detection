@@ -123,16 +123,21 @@ class Trainer(object):
                             filename=cfg['pretrain_model'],
                             map_location=self.device,
                             logger=self.logger)
-            for module in self.model.depth_embed[active_last_idx].modules():
-                if isinstance(module, nn.Linear):
-                    nn.init.xavier_uniform_(module.weight)
-                    if module.bias is not None:
-                        nn.init.zeros_(module.bias)
+            layers = self.model.depth_embed[2].layers
+
+            # Hidden layer
+            nn.init.xavier_uniform_(layers[0].weight)
+            nn.init.zeros_(layers[0].bias)
+
+            # Final layer: correction + uncertainty
+            # Start with zero outputs
+            nn.init.zeros_(layers[-1].weight)
+            nn.init.zeros_(layers[-1].bias)
 
             self.logger.info(
                 "Pretrained base loaded. "
                 "Only depth_context_mlp and depth_embed[2] are trainable. "
-                "depth_embed[2] was re-initialized from scratch."
+                "depth_embed[2] re-initialized with zero final layer."
             )
             #################################################################################################    
         if cfg.get('resume_model', None):
