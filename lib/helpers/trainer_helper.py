@@ -193,7 +193,9 @@ class Trainer(object):
         torch.set_grad_enabled(True)
         self.model.train()
         print(">>>>>>> Epoch:", str(epoch) + ":")
-
+        #############################################################################################################
+        epoch_losses = {}           
+        #############################################################################################################^
         progress_bar = tqdm.tqdm(total=len(self.train_loader), leave=(self.epoch+1 == self.cfg['max_epoch']), desc='iters')
         for batch_idx, (inputs, calibs, targets, info) in enumerate(self.train_loader):
             inputs = inputs.to(self.device)
@@ -226,27 +228,46 @@ class Trainer(object):
                     detr_losses_dict_log[k] = (detr_losses_dict[k] * weight_dict[k]).item()
                     detr_losses_log += detr_losses_dict_log[k]
             detr_losses_dict_log["loss_detr"] = detr_losses_log
-
-            flags = [True] * 5
-            if batch_idx % 30 == 0:
-                print("----", batch_idx, "----")
-                print("%s: %.2f, " %("loss_detr", detr_losses_dict_log["loss_detr"]))
-                for key, val in detr_losses_dict_log.items():
-                    if key == "loss_detr":
-                        continue
-                    if "0" in key or "1" in key or "2" in key or "3" in key or "4" in key or "5" in key:
-                        if flags[int(key[-1])]:
-                            print("")
-                            flags[int(key[-1])] = False
-                    print("%s: %.2f, " %(key, val), end="")
-                print("")
-                print("")
-
+            #############################################################################################################
+            for k, v in detr_losses_dict_log.items():
+                if k not in epoch_losses:
+                    epoch_losses[k] = 0
+                epoch_losses[k] += v
+            #############################################################################################################^
+            # flags = [True] * 5
+            # if batch_idx % 30 == 0:
+            #     print("----", batch_idx, "----")
+            #     print("%s: %.2f, " %("loss_detr", detr_losses_dict_log["loss_detr"]))
+            #     for key, val in detr_losses_dict_log.items():
+            #         if key == "loss_detr":
+            #             continue
+            #         if "0" in key or "1" in key or "2" in key or "3" in key or "4" in key or "5" in key:
+            #             if flags[int(key[-1])]:
+            #                 print("")
+            #                 flags[int(key[-1])] = False
+            #         print("%s: %.2f, " %(key, val), end="")
+            #     print("")
+            #     print("")
             detr_losses.backward()
             self.optimizer.step()
 
             if batch_idx > 0 and batch_idx % 200 == 0:
                 progress_bar.update(200)
+        #############################################################################################################
+        # for k in epoch_losses.keys():
+        #     epoch_losses[k] /= len(self.train_loader)
+        #     print("%s: %.2f, " % (k, epoch_losses[k]), end="")
+        # print("")
+
+        for k in epoch_losses:
+            epoch_losses[k] /= len(self.train_loader)
+
+        print(f"loss_detr: {epoch_losses['loss_detr']:.2f}, ")
+        for k, v in epoch_losses.items():
+            if k != 'loss_detr':
+                print(f"{k}: {v:.2f}, ", end="")
+        # print()
+        #############################################################################################################^
         progress_bar.close()
 
     def prepare_targets(self, targets, batch_size):

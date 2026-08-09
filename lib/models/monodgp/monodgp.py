@@ -124,25 +124,25 @@ class MonoDGP(nn.Module):
             self.depthaware_transformer.decoder.bbox_embed = None
 
         #############################################################################################################
-        #برای شبکه که گیت داشت و سایر اداپتر و فیوژن کوچک تر بود
         # self.feat_adapter_2d = nn.Sequential(
-        #     nn.Linear(hidden_dim, hidden_dim),
+        #     nn.Linear(hidden_dim, hidden_dim * 2),
         #     nn.GELU(),
-        #     nn.Linear(hidden_dim, hidden_dim)
+        #     nn.Dropout(0.1),
+        #     nn.Linear(hidden_dim * 2, hidden_dim)
         # )
 
         # self.feat_adapter_3d = nn.Sequential(
-        #     nn.Linear(hidden_dim, hidden_dim),
+        #     nn.Linear(hidden_dim, hidden_dim * 2),
         #     nn.GELU(),
-        #     nn.Linear(hidden_dim, hidden_dim)
+        #     nn.Dropout(0.1),
+        #     nn.Linear(hidden_dim * 2, hidden_dim)
         # )
 
         # self.fusion_mlp = nn.Sequential(
-        #     nn.Linear(hidden_dim * 2, hidden_dim * 2),
+        #     nn.Linear(hidden_dim * 2, hidden_dim * 4), 
         #     nn.GELU(),
-        #     nn.Linear(hidden_dim * 2, hidden_dim),
-        #     nn.GELU(),
-        #     nn.Linear(hidden_dim, hidden_dim)
+        #     nn.Dropout(0.1),
+        #     nn.Linear(hidden_dim * 4, hidden_dim)  
         # )
 
         # self.bbox_gate = nn.Sequential(
@@ -153,22 +153,22 @@ class MonoDGP(nn.Module):
         self.feat_adapter_2d = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim * 2),
             nn.GELU(),
+            nn.Dropout(0.1),
             nn.Linear(hidden_dim * 2, hidden_dim)
         )
 
         self.feat_adapter_3d = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim * 2),
             nn.GELU(),
+            nn.Dropout(0.1),
             nn.Linear(hidden_dim * 2, hidden_dim)
         )
 
         self.fusion_mlp = nn.Sequential(
-            nn.Linear(hidden_dim * 2, hidden_dim * 4),
+            nn.Linear(hidden_dim * 2, hidden_dim * 4), 
             nn.GELU(),
             nn.Dropout(0.1),
-            nn.Linear(hidden_dim * 4, hidden_dim * 2),
-            nn.GELU(),
-            nn.Linear(hidden_dim * 2, hidden_dim)
+            nn.Linear(hidden_dim * 4, hidden_dim)  
         )
         #############################################################################################################^
 
