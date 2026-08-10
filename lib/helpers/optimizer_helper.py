@@ -4,23 +4,62 @@ import torch.optim as optim
 from torch.optim.optimizer import Optimizer
 
 
-def build_optimizer(cfg_optimizer, model):
-    weights, biases = [], []
-    for name, param in model.named_parameters():
-        if 'bias' in name:
-            biases += [param]
-        else:
-            weights += [param]
+# def build_optimizer(cfg_optimizer, model):
+#     weights, biases = [], []
+#     for name, param in model.named_parameters():
+#         if 'bias' in name:
+#             biases += [param]
+#         else:
+#             weights += [param]
 
-    parameters = [{'params': biases, 'weight_decay': 0},
-                  {'params': weights, 'weight_decay': cfg_optimizer['weight_decay']}]
+#     parameters = [{'params': biases, 'weight_decay': 0},
+#                   {'params': weights, 'weight_decay': cfg_optimizer['weight_decay']}]
+
+#     if cfg_optimizer['type'] == 'sgd':
+#         optimizer = optim.SGD(parameters, lr=cfg_optimizer['lr'], momentum=0.9)
+#     elif cfg_optimizer['type'] == 'adam':
+#         optimizer = optim.Adam(parameters, lr=cfg_optimizer['lr'])
+#     elif cfg_optimizer['type'] == 'adamw':
+#         optimizer = AdamW(parameters, lr=cfg_optimizer['lr'])
+#     else:
+#         raise NotImplementedError("%s optimizer is not supported" % cfg_optimizer['type'])
+
+#     return optimizer
+
+
+
+def build_optimizer(cfg_optimizer, model):
+    mlp_weights, mlp_biases = [], []
+    other_weights, other_biases = [], []
+
+    base_lr = cfg_optimizer['lr']
+    embed_lr = base_lr * 0.1  # Lower learning rate for pretrained/other parts
+
+    for name, param in model.named_parameters():
+        if 'depth_context_mlp' in name:
+            if 'bias' in name:
+                mlp_biases.append(param)
+            else:
+                mlp_weights.append(param)
+        else:
+            if 'bias' in name:
+                other_biases.append(param)
+            else:
+                other_weights.append(param)
+
+    parameters = [
+        {'params': mlp_biases, 'weight_decay': 0, 'lr': base_lr},
+        {'params': mlp_weights, 'weight_decay': cfg_optimizer['weight_decay'], 'lr': base_lr},
+        {'params': other_biases, 'weight_decay': 0, 'lr': embed_lr},
+        {'params': other_weights, 'weight_decay': cfg_optimizer['weight_decay'], 'lr': embed_lr}
+    ]
 
     if cfg_optimizer['type'] == 'sgd':
-        optimizer = optim.SGD(parameters, lr=cfg_optimizer['lr'], momentum=0.9)
+        optimizer = optim.SGD(parameters, lr=base_lr, momentum=0.9)
     elif cfg_optimizer['type'] == 'adam':
-        optimizer = optim.Adam(parameters, lr=cfg_optimizer['lr'])
+        optimizer = optim.Adam(parameters, lr=base_lr)
     elif cfg_optimizer['type'] == 'adamw':
-        optimizer = AdamW(parameters, lr=cfg_optimizer['lr'])
+        optimizer = AdamW(parameters, lr=base_lr)
     else:
         raise NotImplementedError("%s optimizer is not supported" % cfg_optimizer['type'])
 

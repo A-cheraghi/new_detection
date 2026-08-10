@@ -100,16 +100,16 @@ lr_scheduler:
   warmup: False  # 5 epoches, cosine warmup, init_lir=0.00001 in default
   decay_rate: 0.5
   # decay_list: [85, 125, 165, 205]
-  decay_list: [20, 32]
+  decay_list: [4, 7]
 
 
 trainer:
   # max_epoch: 250
-  max_epoch: 40
+  max_epoch: 10
   gpu_ids: '1'
   save_frequency: 1  # checkpoint save interval (in epoch)
-  resume_model: True
-  # pretrain_model: 'outputs/monodgp/checkpoint_best.pth'
+  # resume_model: True
+  pretrain_model: 'outputs/monodgp/checkpoint_best.pth'
   save_path: '../drive/MyDrive/outputs'
   save_all: False  # False for only savng the best and latest ckpts
   use_dn: False

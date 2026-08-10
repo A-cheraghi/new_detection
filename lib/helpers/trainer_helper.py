@@ -123,22 +123,27 @@ class Trainer(object):
                             filename=cfg['pretrain_model'],
                             map_location=self.device,
                             logger=self.logger)
-            layers = self.model.depth_embed[2].layers
 
-            # Hidden layer
-            nn.init.xavier_uniform_(layers[0].weight)
-            nn.init.zeros_(layers[0].bias)
 
-            # Final layer: correction + uncertainty
-            # Start with zero outputs
-            nn.init.zeros_(layers[-1].weight)
-            nn.init.zeros_(layers[-1].bias)
+            # layers = self.model.depth_embed[2].layers
+
+            # # Hidden layer
+            # nn.init.xavier_uniform_(layers[0].weight)
+            # nn.init.zeros_(layers[0].bias)
+
+            # # Final layer: correction + uncertainty
+            # # Start with zero outputs
+            # nn.init.zeros_(layers[-1].weight)
+            # nn.init.zeros_(layers[-1].bias)
 
             self.logger.info(
                 "Pretrained base loaded. "
                 "Only depth_context_mlp and depth_embed[2] are trainable. "
                 "depth_embed[2] re-initialized with zero final layer."
             )
+
+            nn.init.zeros_(self.model.depth_context_mlp[-1].weight)
+            nn.init.zeros_(self.model.depth_context_mlp[-1].bias)
             #################################################################################################    
         if cfg.get('resume_model', None):
             resume_model_path = os.path.join(self.output_dir, "checkpoint.pth")

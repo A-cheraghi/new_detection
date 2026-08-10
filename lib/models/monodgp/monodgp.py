@@ -403,6 +403,29 @@ class MonoDGP(nn.Module):
             outputs_angles.append(outputs_angle)
 
             # depth_geo_err
+            # if lvl == hs.shape[0] - 1:
+            #     depth_context_input = torch.cat(
+            #         [
+            #             hs[lvl],
+            #             outputs_angle,
+            #             depth_geo.unsqueeze(-1)
+            #         ],
+            #         dim=-1
+            #     )
+
+            #     depth_context_feature = self.depth_context_mlp(
+            #         depth_context_input
+            #     )
+
+            #     depth_geo_err = self.depth_embed[lvl](
+            #         depth_context_feature
+            #     )
+
+            # else:
+            #     depth_geo_err = self.depth_embed[lvl](
+            #         hs[lvl]
+            #     )
+
             if lvl == hs.shape[0] - 1:
                 depth_context_input = torch.cat(
                     [
@@ -413,10 +436,16 @@ class MonoDGP(nn.Module):
                     dim=-1
                 )
 
-                depth_context_feature = self.depth_context_mlp(
+                # 1. Get the output of the new MLP (which will be exactly 0 at step 0)
+                residual_feature = self.depth_context_mlp(
                     depth_context_input
                 )
 
+                # 2. Add it to the original feature (Residual Connection)
+                # At step 0: depth_context_feature = hs[lvl] + 0 = hs[lvl]
+                depth_context_feature = hs[lvl] + residual_feature
+
+                # 3. Pass it to the pretrained depth_embed
                 depth_geo_err = self.depth_embed[lvl](
                     depth_context_feature
                 )
